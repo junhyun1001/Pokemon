@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Poke</title>
+    <!-- Tailwind CSS CDN 추가 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <!-- 전체 페이지 스타일: 회색 배경, flex 중앙 정렬 -->
+  <body
+    class="bg-gray-100 flex justify-center items-start min-h-screen p-4 sm:p-8"
+  >
+    <!-- 메인 콘텐츠 컨테이너: 최대 너비 지정, 중앙 정렬 -->
+    <main class="w-full max-w-md">
+      <h1
+        class="text-4xl sm:text-5xl font-bold text-center mb-8 text-yellow-500 drop-shadow"
+      >
+        포켓몬 도감
+      </h1>
+
+      <!-- 검색 폼 섹션: 카드 디자인 적용 -->
+      <section class="bg-white p-6 rounded-xl shadow-lg mb-8">
+        <form id="pokeForm" class="flex items-end">
+          <div class="flex-grow">
+            <label
+              for="pokeId"
+              class="block text-gray-700 text-sm font-bold mb-2"
+            >
+              포켓몬 ID (1-1025)
+            </label>
+            <input
+              id="pokeId"
+              type="number"
+              min="1"
+              max="1025"
+              placeholder="예: 25"
+              required
+              class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200"
+            />
+          </div>
+          <button
+            type="submit"
+            id="pokeBtn"
+            class="ml-4 bg-blue-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-blue-700 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+          >
+            검색
+          </button>
+        </form>
+      </section>
+
+      <!-- 포켓몬 정보가 표시될 카드: 초기에는 숨김 -->
+      <section
+        id="pokeBox"
+        class="bg-white p-6 rounded-xl shadow-lg text-center hidden"
+      ></section>
+    </main>
+
+    <script>
+      // DOM 요소 선택
+      const pokeForm = document.querySelector("#pokeForm");
+      const pokeIdInput = document.querySelector("#pokeId");
+      const pokeBox = document.querySelector("#pokeBox");
+
+      // 1. API에서 데이터 호출
+      async function getPokemon(id) {
+        pokeBox.innerHTML = `<p class="text-gray-500">데이터를 불러오는 중...</p>`;
+        pokeBox.classList.remove("hidden");
+
+        try {
+          // 두 개의 API 요청을 동시에 보냄
+          const [pokemonRes, speciesRes] = await Promise.all([
+            fetch(`https://pokeapi.co/api/v2/pokemon/${id}`),
+            fetch(`https://pokeapi.co/api/v2/pokemon-species/${id}`),
+          ]);
+
+          // 두 요청 중 하나라도 실패하면 에러 발생
+          if (!pokemonRes.ok || !speciesRes.ok) {
+            throw new Error("포켓몬 정보를 가져오는 데 실패했습니다.");
+          }
+
+          const pokemonData = await pokemonRes.json();
+          const speciesData = await speciesRes.json();
+
+          // 한글 이름 찾기 (없을 경우 영문 이름 사용)
+          const koNameObj = speciesData.names.find(
+            (nameInfo) => nameInfo.language.name === "ko"
+          );
+          const koName = koNameObj ? koNameObj.name : pokemonData.name;
+
+          // 포켓몬 타입들을 배열로 추출
+          const types = pokemonData.types.map((typeInfo) => typeInfo.type.name);
+
+          const pokeData = {
+            koName,
+            height: pokemonData.height,
+            weight: pokemonData.weight,
+            types: types,
+            shape: pokemonData.sprites.front_default,
+            sound: pokemonData.cries.latest,
+          };
+
+          // 로컬 스토리지에 최근 검색 데이터 저장
+          localStorage.setItem("recentPoke", JSON.stringify(pokeData));
+
+          // 화면에 데이터 렌더링
+          renderPoke(pokeData);
+        } catch (error) {
+          console.error("Error fetching Pokemon:", error);
+          pokeBox.innerHTML = `<p class="text-red-500 font-bold">검색 결과가 없습니다. ID를 확인해주세요.</p>`;
+        }
+      }
+
+      // 2. 폼 제출(submit) 이벤트 리스너
+      pokeForm.addEventListener("submit", (event) => {
+        // 폼의 기본 동작(페이지 새로고침) 방지
+        event.preventDefault();
+        const id = pokeIdInput.value;
+        if (id) {
+          getPokemon(id);
+        }
+      });
+
+      // 3. 데이터 화면에 그리기
+      function renderPoke({ koName, types, height, weight, shape, sound }) {
+        // 검색 결과 카드를 보이게 함
+        pokeBox.classList.remove("hidden");
+
+        // 포켓몬 타입에 따라 배경색을 다르게 표시하기 위한 HTML 생성
+        const typesHtml = types
+          .map(
+            (type) =>
+              `<span class="bg-gray-200 text-gray-800 text-xs font-semibold mr-2 px-2.5 py-0.5 rounded-full">${type}</span>`
+          )
+          .join("");
+
+        // innerHTML을 사용하여 카드 내부를 동적으로 구성
+        pokeBox.innerHTML = `
+            <h2 class="text-3xl font-bold mb-2">${koName}</h2>
+            <img src="${shape}" alt="${koName}" class="mx-auto w-40 h-40 mb-4"/>
+            <div class="mb-4">
+              <p class="font-bold text-lg">타입</p>
+              <div class="mt-1">${typesHtml}</div>
+            </div>
+            <!-- 키와 몸무게를 flexbox를 사용해 중앙에 배치합니다. -->
+            <div class="flex justify-center gap-x-8 text-center">
+                <p><b>키:</b> ${height / 10} m</p>
+                <p><b>몸무게:</b> ${weight / 10} kg</p>
+            </div>
+            <audio src="${sound}" controls class="w-full mt-6"></audio>
+        `;
+      }
+
+      // 4. 직전 검색 데이터 Storage 로드
+      document.addEventListener("DOMContentLoaded", () => {
+        const rawRecentPoke = localStorage.getItem("recentPoke");
+        if (rawRecentPoke) {
+          const recentPoke = JSON.parse(rawRecentPoke);
+          renderPoke(recentPoke);
+        }
+      });
+    </script>
+  </body>
+</html>
